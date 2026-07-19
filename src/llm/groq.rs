@@ -153,6 +153,41 @@ impl super::LlmClient for GroqClient {
         &self,
         tool_page_content: &str,
     ) -> Result<super::ToolSummary, super::LlmError> {
-        todo!()
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "summary": { "type": "string" },
+            },
+            "required": ["summary"],
+            "additionalProperties": false
+        });
+
+        let request = GroqCompletionsRequest {
+            model: GROQ_MODEL.to_string(),
+            stream: false,
+            messages: vec![
+                GroqMessage {
+                    role: GroqRole::System,
+                    content: Some(
+                        "You are a helpful assistant that summarizes tool presentation page into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated.".into(),
+                    ),
+                },
+                GroqMessage {
+                    role: GroqRole::User,
+                    content: Some(tool_page_content.into()),
+                },
+            ],
+            response_format: GroqRequestResponseFormat {
+                response_type: GROQ_RESPONSE_FORMAT_JSON_SCHEMA.to_string(),
+                json_schema: GroqRequestResponseFormatJsonSchema {
+                    name: "article_summary".to_string(),
+                    schema: Some(schema),
+                    strict: Some(true),
+                },
+            },
+        };
+
+        let raw_json = self.send_completion_request(request).await?;
+        serde_json::from_str(&raw_json).map_err(|err| LlmError::ResponseParseError(err.to_string()))
     }
 }

@@ -22,6 +22,17 @@ read: false
 {{ summary }}
 "#;
 
+const TOOL_TEMPLATE: &str = r#"---
+type: radar/tool
+url:  {{ url }}
+date_created: {{ date }}
+---
+
+# {{ title }}
+
+{{ summary }}
+"#;
+
 struct ArticleContext {
     url: String,
     title: Option<String>,
@@ -83,6 +94,43 @@ impl Vault {
                         date => today,
                         summary => summary,
                         tags => tags,
+        })?;
+
+        std::fs::write(&file_path, rendered)?;
+
+        Ok(file_path)
+    }
+
+    pub fn write_tool_report(
+        &self,
+        url: &str,
+        title: Option<String>,
+        summary: &str,
+    ) -> Result<PathBuf, VaultError> {
+        let report_dir = self.path.join(TOOLS_REPORT_PATH);
+        std::fs::create_dir_all(&report_dir)?;
+
+        let resolved_title = build_file_name(title);
+        let file_path = report_dir.join(&resolved_title).with_extension("md");
+        if file_path.exists() {
+            return Err(VaultError::IoError(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("File already exists: {}", file_path.display()),
+            )));
+        }
+
+        let today = Local::now().format("%Y-%m-%d").to_string();
+
+        let mut env = Environment::new();
+        env.add_template("tool", TOOL_TEMPLATE)?;
+
+        let template = env.get_template("tool")?;
+
+        let rendered = template.render(context! {
+            title => resolved_title,
+                        url => url,
+                        date => today,
+                        summary => summary,
         })?;
 
         std::fs::write(&file_path, rendered)?;

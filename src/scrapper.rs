@@ -17,7 +17,6 @@ pub enum ScrapError {
 pub struct ScrapResult {
     pub title: Option<String>,
     pub content: String,
-    pub url: String,
 }
 
 #[derive(Debug)]
@@ -62,7 +61,6 @@ impl Scrapper {
         Ok(ScrapResult {
             title: extract_title(md_conversion.metadata),
             content,
-            url: url.to_string(),
         })
     }
 }
