@@ -61,8 +61,14 @@ impl Vault {
         let report_dir = self.path.join(ARTICLES_REPORT_PATH);
         std::fs::create_dir_all(&report_dir)?;
 
-        let resolved_title = get_file_name(title);
+        let resolved_title = build_file_name(title);
         let file_path = report_dir.join(&resolved_title).with_extension("md");
+        if file_path.exists() {
+            return Err(VaultError::IoError(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("File already exists: {}", file_path.display()),
+            )));
+        }
 
         let today = Local::now().format("%Y-%m-%d").to_string();
 
@@ -85,9 +91,42 @@ impl Vault {
     }
 }
 
-fn get_file_name(parsed_name: Option<String>) -> String {
+fn build_file_name(parsed_name: Option<String>) -> String {
     match parsed_name {
-        Some(name) => name, // TODO: sanitize name to be a valid Windows file name
-        None => "untitled_article".to_string(), // TODO: what if already taken at path?
+        Some(name) => sanitize_file_name(&name),
+        None => "untitled_article".to_string(),
     }
+}
+
+fn sanitize_file_name(name: &str) -> String {
+    let mut sanitized: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '-',
+            c if (c as u32) < 0x20 => '_',
+            c => c,
+        })
+        .collect();
+
+    sanitized = sanitized.trim_end_matches(['.', ' ']).to_string();
+
+    if sanitized.is_empty() {
+        sanitized = "untitled".to_string();
+    }
+
+    let upper = sanitized.to_uppercase();
+    let reserved = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    let base = upper.split('.').next().unwrap_or("");
+    if reserved.contains(&base) {
+        sanitized = format!("_{sanitized}");
+    }
+
+    if sanitized.len() > 255 {
+        sanitized.truncate(255);
+    }
+
+    sanitized
 }

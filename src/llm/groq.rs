@@ -127,7 +127,7 @@ impl super::LlmClient for GroqClient {
                 GroqMessage {
                     role: GroqRole::System,
                     content: Some(
-                        "You are a helpful assistant that summarizes articles into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated. Between 1 and 3 tags max.".into(),
+                        "You are a helpful assistant that summarizes articles into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated. Between 1 and 3 tags max. No spaces in tags.".into(),
                     ),
                 },
                 GroqMessage {

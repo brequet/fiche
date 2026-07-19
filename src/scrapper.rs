@@ -41,6 +41,8 @@ impl Scrapper {
             .await
             .map_err(|e| ScrapError::ParseError(e.to_string()))?;
 
+        // TODO: Consider extracting the <article> tag content if present, or the main content of the page, instead of converting the entire HTML to Markdown.
+
         let md_conversion = html_to_markdown_rs::convert(raw_html.as_str(), None)?;
 
         if md_conversion.warnings.len() > 0 {
