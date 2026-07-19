@@ -5,13 +5,13 @@ pub mod groq;
 #[derive(Debug, thiserror::Error)]
 pub enum LlmError {
     #[error("HTTP request failed: {0}")]
-    HttpRequestError(String),
+    HttpRequest(String),
 
     #[error("Failed to parse response: {0}")]
-    ResponseParseError(String),
+    ResponseParse(String),
 
     #[error("API returned an error: {0}")]
-    ApiError(String),
+    Api(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

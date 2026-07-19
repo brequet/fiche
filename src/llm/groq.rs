@@ -1,5 +1,5 @@
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::json;
 
 use crate::llm::LlmError;
@@ -9,9 +9,9 @@ const GROQ_MODEL: &str = "openai/gpt-oss-120b";
 
 #[derive(Debug, Serialize)]
 struct GroqCompletionsRequest {
-    messages: Vec<GroqMessage>,
     model: String,
     stream: bool,
+    messages: Vec<GroqMessage>,
     response_format: GroqRequestResponseFormat,
 }
 
@@ -69,10 +69,36 @@ impl GroqClient {
         }
     }
 
-    async fn send_completion_request(
+    async fn generate_structured<T: DeserializeOwned>(
         &self,
-        request: GroqCompletionsRequest,
-    ) -> Result<String, LlmError> {
+        system_prompt: &str,
+        user_content: &str,
+        schema_name: &str,
+        schema: serde_json::Value,
+    ) -> Result<T, LlmError> {
+        let request = GroqCompletionsRequest {
+            model: GROQ_MODEL.to_string(),
+            stream: false,
+            messages: vec![
+                GroqMessage {
+                    role: GroqRole::System,
+                    content: Some(system_prompt.to_string()),
+                },
+                GroqMessage {
+                    role: GroqRole::User,
+                    content: Some(user_content.to_string()),
+                },
+            ],
+            response_format: GroqRequestResponseFormat {
+                response_type: GROQ_RESPONSE_FORMAT_JSON_SCHEMA.to_string(),
+                json_schema: GroqRequestResponseFormatJsonSchema {
+                    name: schema_name.to_string(),
+                    schema: Some(schema),
+                    strict: Some(true),
+                },
+            },
+        };
+
         let response = self
             .http_client
             .post(GROQ_API_URL)
@@ -80,25 +106,26 @@ impl GroqClient {
             .json(&request)
             .send()
             .await
-            .map_err(|err| LlmError::HttpRequestError(err.to_string()))?;
+            .map_err(|err| LlmError::HttpRequest(err.to_string()))?;
 
         if !response.status().is_success() {
             let err_body = response.text().await.unwrap_or_default();
-            return Err(LlmError::ApiError(err_body));
+            return Err(LlmError::Api(err_body));
         }
 
-        let groq_res: GroqCompletionsResponse = response
+        let body: GroqCompletionsResponse = response
             .json()
             .await
-            .map_err(|err| LlmError::ResponseParseError(err.to_string()))?;
+            .map_err(|err| LlmError::ResponseParse(err.to_string()))?;
 
-        let content = groq_res
+        let content = body
             .choices
-            .first()
-            .and_then(|choice| choice.message.content.clone())
-            .ok_or_else(|| LlmError::ApiError("No response content returned".to_string()))?;
+            .into_iter()
+            .next()
+            .and_then(|choice| choice.message.content)
+            .ok_or_else(|| LlmError::Api("No response content returned".to_string()))?;
 
-        Ok(content)
+        serde_json::from_str(&content).map_err(|err| LlmError::ResponseParse(err.to_string()))
     }
 }
 
@@ -120,33 +147,13 @@ impl super::LlmClient for GroqClient {
             "additionalProperties": false
         });
 
-        let request = GroqCompletionsRequest {
-            model: GROQ_MODEL.to_string(),
-            stream: false,
-            messages: vec![
-                GroqMessage {
-                    role: GroqRole::System,
-                    content: Some(
-                        "You are a helpful assistant that summarizes articles into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated. Between 1 and 3 tags max. No spaces in tags.".into(),
-                    ),
-                },
-                GroqMessage {
-                    role: GroqRole::User,
-                    content: Some(article_page_content.into()),
-                },
-            ],
-            response_format: GroqRequestResponseFormat {
-                response_type: GROQ_RESPONSE_FORMAT_JSON_SCHEMA.to_string(),
-                json_schema: GroqRequestResponseFormatJsonSchema {
-                    name: "article_summary".to_string(),
-                    schema: Some(schema),
-                    strict: Some(true),
-                },
-            },
-        };
-
-        let raw_json = self.send_completion_request(request).await?;
-        serde_json::from_str(&raw_json).map_err(|err| LlmError::ResponseParseError(err.to_string()))
+        self.generate_structured(
+            "You are a helpful assistant that summarizes articles into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated. Between 1 and 3 tags max. No spaces in tags.",
+            article_page_content,
+            "article_summary",
+            schema,
+        )
+        .await
     }
 
     async fn generate_tool_summary(
@@ -162,32 +169,12 @@ impl super::LlmClient for GroqClient {
             "additionalProperties": false
         });
 
-        let request = GroqCompletionsRequest {
-            model: GROQ_MODEL.to_string(),
-            stream: false,
-            messages: vec![
-                GroqMessage {
-                    role: GroqRole::System,
-                    content: Some(
-                        "You are a helpful assistant that summarizes tool presentation page into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated.".into(),
-                    ),
-                },
-                GroqMessage {
-                    role: GroqRole::User,
-                    content: Some(tool_page_content.into()),
-                },
-            ],
-            response_format: GroqRequestResponseFormat {
-                response_type: GROQ_RESPONSE_FORMAT_JSON_SCHEMA.to_string(),
-                json_schema: GroqRequestResponseFormatJsonSchema {
-                    name: "article_summary".to_string(),
-                    schema: Some(schema),
-                    strict: Some(true),
-                },
-            },
-        };
-
-        let raw_json = self.send_completion_request(request).await?;
-        serde_json::from_str(&raw_json).map_err(|err| LlmError::ResponseParseError(err.to_string()))
+        self.generate_structured(
+            "You are a helpful assistant that summarizes tool presentation page into structured JSON. Be pragmatic, brief and concise. Add keypoints if appropriated.",
+            tool_page_content,
+            "tool_summary",
+            schema,
+        )
+        .await
     }
 }

@@ -5,13 +5,13 @@ use tracing::warn;
 #[derive(Debug, thiserror::Error)]
 pub enum ScrapError {
     #[error("Failed to fetch the URL: {0}")]
-    FetchError(#[from] reqwest::Error),
+    Fetch(#[from] reqwest::Error),
 
     #[error("Failed to parse the HTML content: {0}")]
-    ParseError(String),
+    Parse(String),
 
     #[error("Failed to convert HTML to Markdown: {0}")]
-    ConversionError(#[from] html_to_markdown_rs::ConversionError),
+    Conversion(#[from] html_to_markdown_rs::ConversionError),
 }
 
 pub struct ScrapResult {
@@ -75,7 +75,7 @@ impl Scrapper {
             if let Ok(res) = response
                 && res.status().is_success()
             {
-                let content = res.text().await.map_err(ScrapError::FetchError)?;
+                let content = res.text().await.map_err(ScrapError::Fetch)?;
                 return Ok(ScrapResult {
                     title: Some(format!("{} ({})", repo, user)),
                     content,
@@ -94,10 +94,10 @@ impl Scrapper {
             .get(url)
             .send()
             .await
-            .map_err(ScrapError::FetchError)?
+            .map_err(ScrapError::Fetch)?
             .text()
             .await
-            .map_err(|e| ScrapError::ParseError(e.to_string()))?;
+            .map_err(|e| ScrapError::Parse(e.to_string()))?;
 
         let md_conversion = html_to_markdown_rs::convert(raw_html.as_str(), None)?;
 
@@ -111,9 +111,9 @@ impl Scrapper {
             });
         }
 
-        let content = md_conversion.content.ok_or_else(|| {
-            ScrapError::ParseError("Failed to extract content from HTML".to_string())
-        })?;
+        let content = md_conversion
+            .content
+            .ok_or_else(|| ScrapError::Parse("Failed to extract content from HTML".to_string()))?;
 
         Ok(ScrapResult {
             title: extract_title(md_conversion.metadata),
