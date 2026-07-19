@@ -6,6 +6,8 @@ use crate::llm::LlmError;
 
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL: &str = "openai/gpt-oss-120b";
+const GROQ_REQUEST_MAX_COMPLETION_TOKENS: u32 = 512;
+const GROQ_RESPONSE_FORMAT_JSON_SCHEMA: &str = "json_schema";
 
 #[derive(Debug, Serialize)]
 struct GroqCompletionsRequest {
@@ -13,6 +15,7 @@ struct GroqCompletionsRequest {
     stream: bool,
     messages: Vec<GroqMessage>,
     response_format: GroqRequestResponseFormat,
+    max_completion_tokens: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -28,8 +31,6 @@ enum GroqRole {
     User,
     Assistant,
 }
-
-const GROQ_RESPONSE_FORMAT_JSON_SCHEMA: &str = "json_schema";
 
 #[derive(Debug, Serialize)]
 struct GroqRequestResponseFormat {
@@ -97,6 +98,7 @@ impl GroqClient {
                     strict: Some(true),
                 },
             },
+            max_completion_tokens: Some(GROQ_REQUEST_MAX_COMPLETION_TOKENS),
         };
 
         let response = self

@@ -99,7 +99,9 @@ impl Scrapper {
             .await
             .map_err(|e| ScrapError::Parse(e.to_string()))?;
 
-        let md_conversion = html_to_markdown_rs::convert(raw_html.as_str(), None)?;
+        let html_to_convert = extract_main_content(&raw_html).unwrap_or(raw_html);
+
+        let md_conversion = html_to_markdown_rs::convert(html_to_convert.as_str(), None)?;
 
         if !md_conversion.warnings.is_empty() {
             warn!(
@@ -117,9 +119,33 @@ impl Scrapper {
 
         Ok(ScrapResult {
             title: extract_title(md_conversion.metadata),
-            content,
+            content: truncate_to_token_budget(content),
         })
     }
+}
+
+fn extract_main_content(raw_html: &str) -> Option<String> {
+    let dom = tl::parse(raw_html, tl::ParserOptions::default()).ok()?;
+    let parser = dom.parser();
+
+    // Strategy 1: Look for standard semantic <article> tags first
+    if let Some(article_handle) = dom
+        .query_selector("article")
+        .and_then(|mut iter| iter.next())
+    {
+        if let Some(node) = article_handle.get(parser) {
+            return Some(node.inner_html(parser).into_owned());
+        }
+    }
+
+    // Strategy 2: Look for generic <body> fallback to ditch raw script/head tags
+    if let Some(body_handle) = dom.query_selector("body").and_then(|mut iter| iter.next()) {
+        if let Some(node) = body_handle.get(parser) {
+            return Some(node.inner_html(parser).into_owned());
+        }
+    }
+
+    None
 }
 
 fn extract_title(html_metadata: HtmlMetadata) -> Option<String> {
@@ -128,4 +154,20 @@ fn extract_title(html_metadata: HtmlMetadata) -> Option<String> {
         .iter()
         .find(|header| header.level == 1)
         .map(|header| header.text.clone()))
+}
+
+fn truncate_to_token_budget(mut content: String) -> String {
+    const MAX_CHARS: usize = 20_000;
+
+    if content.len() > MAX_CHARS {
+        let cut_index = content
+            .char_indices()
+            .map(|(idx, _)| idx)
+            .find(|&idx| idx >= MAX_CHARS)
+            .unwrap_or(content.len());
+
+        content.truncate(cut_index);
+        content.push_str("\n\n[... Content truncated due to context size limits ...]");
+    }
+    content
 }

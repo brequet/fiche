@@ -15,7 +15,7 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
-        dotenvy::dotenv()?;
+        dotenvy::dotenv().ok(); // Load .env file if it exists
 
         let vault_path = Self::load_mandatory_env_var("FICHE_VAULT_PATH")?;
         let groq_api_key = Self::load_mandatory_env_var("GROQ_API_KEY")?;
