@@ -40,6 +40,7 @@ async fn run(args: Args) -> Result<(), AppError> {
     match args.command {
         cli::Commands::Article(cmd) => commands::article::article_clip(&cmd.url, ctx).await,
         cli::Commands::Tool(cmd) => commands::tool::tool_clip(&cmd.url, ctx).await,
+        cli::Commands::Issue(_) => commands::issue::create_issue(ctx).await,
     }
 }
 

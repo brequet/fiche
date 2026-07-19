@@ -21,6 +21,7 @@ impl Args {
 pub enum Commands {
     Article(ArticleClipCommand),
     Tool(ToolClipCommand),
+    Issue(IssueCreateCommand),
 }
 
 #[derive(Parser, Debug)]
@@ -34,3 +35,6 @@ pub struct ToolClipCommand {
     #[arg(required = true, help = "The URL")]
     pub url: String,
 }
+
+#[derive(Parser, Debug)]
+pub struct IssueCreateCommand {}

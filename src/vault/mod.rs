@@ -5,9 +5,6 @@ use minijinja::Environment;
 use serde::Serialize;
 use std::io::Write;
 
-const ARTICLES_REPORT_PATH: &str = "10_Personal/tech-radar/reports";
-const TOOLS_REPORT_PATH: &str = "10_Personal/tech-radar/tools";
-
 const ARTICLE_TEMPLATE: &str = r#"---
 type: radar/report
 url: {{ url }}
@@ -70,7 +67,7 @@ impl ReportPayload for ArticleReportContext {
     }
 
     fn dir_path(&self) -> &str {
-        ARTICLES_REPORT_PATH
+        "10_Personal/tech-radar/reports"
     }
 
     fn title(&self) -> &str {
@@ -92,7 +89,7 @@ impl ReportPayload for ToolReportContext {
     }
 
     fn dir_path(&self) -> &str {
-        TOOLS_REPORT_PATH
+        "10_Personal/tech-radar/tools"
     }
 
     fn title(&self) -> &str {
@@ -127,32 +124,6 @@ impl Vault {
         })
     }
 
-    fn write_report<T: ReportPayload>(&self, payload: &T) -> Result<PathBuf, VaultError> {
-        let report_dir = self.path.join(payload.dir_path());
-        std::fs::create_dir_all(&report_dir)?;
-
-        let file_path = report_dir.join(format!("{}.md", payload.title()));
-        if file_path.exists() {
-            return Err(VaultError::IoError(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                format!("File already exists: {}", file_path.display()),
-            )));
-        }
-
-        let template = self
-            .templates_env
-            .get_template(payload.template_kind().as_str())?;
-        let rendered = template.render(payload)?;
-
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&file_path)?;
-        file.write_all(rendered.as_bytes())?;
-
-        Ok(file_path)
-    }
-
     pub fn write_article_report(
         &self,
         url: &str,
@@ -184,6 +155,66 @@ impl Vault {
             date: today(),
         };
         self.write_report(&ctx)
+    }
+
+    fn write_report<T: ReportPayload>(&self, payload: &T) -> Result<PathBuf, VaultError> {
+        let report_dir = self.path.join(payload.dir_path());
+        std::fs::create_dir_all(&report_dir)?;
+
+        let file_path = report_dir.join(format!("{}.md", payload.title()));
+        if file_path.exists() {
+            return Err(VaultError::IoError(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("File already exists: {}", file_path.display()),
+            )));
+        }
+
+        let template = self
+            .templates_env
+            .get_template(payload.template_kind().as_str())?;
+        let rendered = template.render(payload)?;
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file_path)?;
+        file.write_all(rendered.as_bytes())?;
+
+        Ok(file_path)
+    }
+
+    pub fn list_issue_keys(&self) -> Result<Vec<String>, VaultError> {
+        // List jira_project_key at 20_Work/projects/{project}/issues/{jira_project_key}
+        let projects_dir = self.path.join("20_Work/projects");
+        let mut issue_keys = Vec::new();
+
+        let project_entries = std::fs::read_dir(projects_dir)?;
+        for project_entry in project_entries {
+            let project_entry = project_entry.map_err(VaultError::from)?;
+            let project_path = project_entry.path();
+
+            if project_path.is_dir() {
+                let issues_dir = project_path.join("issues");
+
+                if issues_dir.is_dir() {
+                    let jira_entries = std::fs::read_dir(issues_dir).map_err(VaultError::from)?;
+
+                    for jira_entry in jira_entries {
+                        let jira_entry = jira_entry.map_err(VaultError::from)?;
+                        let jira_path = jira_entry.path();
+
+                        if jira_path.is_dir()
+                            && let Some(key_os_str) = jira_path.file_name()
+                            && let Some(key_str) = key_os_str.to_str()
+                        {
+                            issue_keys.push(key_str.to_string().to_ascii_uppercase());
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(issue_keys)
     }
 }
 
