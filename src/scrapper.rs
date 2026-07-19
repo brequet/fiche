@@ -1,5 +1,5 @@
 use html_to_markdown_rs::HtmlMetadata;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use tracing::warn;
 
 #[derive(Debug, thiserror::Error)]
@@ -12,11 +12,41 @@ pub enum ScrapError {
 
     #[error("Failed to convert HTML to Markdown: {0}")]
     ConversionError(#[from] html_to_markdown_rs::ConversionError),
+
+    #[error("Invalid URL format: {0}")]
+    UrlError(#[from] url::ParseError),
 }
 
 pub struct ScrapResult {
     pub title: Option<String>,
     pub content: String,
+}
+
+enum PageType {
+    GitHub { user: String, repository: String },
+    GenericWeb,
+}
+
+impl PageType {
+    fn from_url(url_str: &str) -> Self {
+        if let Ok(url) = Url::parse(url_str) {
+            if let Some(host) = url.host_str() {
+                if host == "github.com" || host == "www.github.com" {
+                    let segments: Vec<&str> =
+                        url.path_segments().map(|c| c.collect()).unwrap_or_default();
+
+                    // Paths like /user/repo
+                    if segments.len() >= 2 {
+                        return PageType::GitHub {
+                            user: segments[0].to_string(),
+                            repository: segments[1].to_string(),
+                        };
+                    }
+                }
+            }
+        }
+        PageType::GenericWeb
+    }
 }
 
 #[derive(Debug)]
@@ -30,6 +60,40 @@ impl Scrapper {
     }
 
     pub async fn scrap(&self, url: &str) -> Result<ScrapResult, ScrapError> {
+        match PageType::from_url(url) {
+            PageType::GitHub { user, repository } => self.scrap_github(&user, &repository).await,
+            PageType::GenericWeb => self.scrap_generic(url).await,
+        }
+    }
+
+    async fn scrap_github(&self, user: &str, repo: &str) -> Result<ScrapResult, ScrapError> {
+        let variants = ["README.md", "readme.md"];
+
+        for filename in variants.iter() {
+            let raw_url = format!(
+                "https://raw.githubusercontent.com/{}/{}/HEAD/{}",
+                user, repo, filename
+            );
+
+            let response = self.http_client.get(&raw_url).send().await;
+
+            if let Ok(res) = response {
+                if res.status().is_success() {
+                    let content = res.text().await.map_err(ScrapError::FetchError)?;
+                    return Ok(ScrapResult {
+                        title: Some(format!("{} ({})", repo, user)),
+                        content,
+                    });
+                }
+            }
+        }
+
+        // Fallback to generic scraping if raw assets aren't located safely
+        let fallback_url = format!("https://github.com/{}/{}", user, repo);
+        self.scrap_generic(&fallback_url).await
+    }
+
+    async fn scrap_generic(&self, url: &str) -> Result<ScrapResult, ScrapError> {
         let raw_html = self
             .http_client
             .get(url)
@@ -40,11 +104,9 @@ impl Scrapper {
             .await
             .map_err(|e| ScrapError::ParseError(e.to_string()))?;
 
-        // TODO: Consider extracting the <article> tag content if present, or the main content of the page, instead of converting the entire HTML to Markdown.
-
         let md_conversion = html_to_markdown_rs::convert(raw_html.as_str(), None)?;
 
-        if md_conversion.warnings.len() > 0 {
+        if !md_conversion.warnings.is_empty() {
             warn!(
                 "HTML to Markdown conversion generated {} warnings",
                 md_conversion.warnings.len()
