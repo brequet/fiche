@@ -29,15 +29,11 @@ async fn main() {
 async fn run(args: Args) -> Result<(), AppError> {
     let config = config::Config::load()?;
 
-    let http_client = Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .user_agent("fiche-cli/1.0")
-        .build()
-        .map_err(|e| AppError::InitializationError(e.to_string()))?;
+    let http_client = http_client()?;
 
     let scrapper = scrapper::Scrapper::new(http_client.clone());
     let groq_client = llm::groq::GroqClient::new(config.groq_api_key.clone(), http_client);
-    let vault = vault::Vault::new(config.vault_path);
+    let vault = vault::Vault::new(config.vault_path)?;
 
     let ctx = context::AppContext::new(scrapper, groq_client, vault);
 
@@ -62,4 +58,12 @@ fn init_tracing(verbose: bool) {
         .init();
 
     debug!("Verbose logging enabled.");
+}
+
+fn http_client() -> Result<Client, AppError> {
+    Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("fiche-cli/1.0")
+        .build()
+        .map_err(|e| AppError::InitializationError(e.to_string()))
 }

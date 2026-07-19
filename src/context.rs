@@ -1,8 +1,6 @@
-use reqwest::Client;
 use std::sync::Arc;
-use thiserror::Error;
 
-use crate::{config::Config, llm::groq::GroqClient, scrapper::Scrapper, vault::Vault};
+use crate::{llm::groq::GroqClient, scrapper::Scrapper, vault::Vault};
 
 #[derive(Debug, Clone)]
 pub struct AppContext {

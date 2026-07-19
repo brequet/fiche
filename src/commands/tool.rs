@@ -13,7 +13,7 @@ pub async fn tool_clip(url: &str, ctx: AppContext) -> Result<(), AppError> {
         .vault
         .write_tool_report(url, tool.title, &summary.summary)?;
 
-    info!("Article report written to: {}", article_path.display());
+    info!("Tool report written to: {}", article_path.display());
 
     Ok(())
 }

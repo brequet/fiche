@@ -12,9 +12,6 @@ pub enum ScrapError {
 
     #[error("Failed to convert HTML to Markdown: {0}")]
     ConversionError(#[from] html_to_markdown_rs::ConversionError),
-
-    #[error("Invalid URL format: {0}")]
-    UrlError(#[from] url::ParseError),
 }
 
 pub struct ScrapResult {
@@ -29,20 +26,18 @@ enum PageType {
 
 impl PageType {
     fn from_url(url_str: &str) -> Self {
-        if let Ok(url) = Url::parse(url_str) {
-            if let Some(host) = url.host_str() {
-                if host == "github.com" || host == "www.github.com" {
-                    let segments: Vec<&str> =
-                        url.path_segments().map(|c| c.collect()).unwrap_or_default();
+        if let Ok(url) = Url::parse(url_str)
+            && let Some(host) = url.host_str()
+            && (host == "github.com" || host == "www.github.com")
+        {
+            let segments: Vec<&str> = url.path_segments().map(|c| c.collect()).unwrap_or_default();
 
-                    // Paths like /user/repo
-                    if segments.len() >= 2 {
-                        return PageType::GitHub {
-                            user: segments[0].to_string(),
-                            repository: segments[1].to_string(),
-                        };
-                    }
-                }
+            // Paths like /user/repo
+            if segments.len() >= 2 {
+                return PageType::GitHub {
+                    user: segments[0].to_string(),
+                    repository: segments[1].to_string(),
+                };
             }
         }
         PageType::GenericWeb
@@ -77,14 +72,14 @@ impl Scrapper {
 
             let response = self.http_client.get(&raw_url).send().await;
 
-            if let Ok(res) = response {
-                if res.status().is_success() {
-                    let content = res.text().await.map_err(ScrapError::FetchError)?;
-                    return Ok(ScrapResult {
-                        title: Some(format!("{} ({})", repo, user)),
-                        content,
-                    });
-                }
+            if let Ok(res) = response
+                && res.status().is_success()
+            {
+                let content = res.text().await.map_err(ScrapError::FetchError)?;
+                return Ok(ScrapResult {
+                    title: Some(format!("{} ({})", repo, user)),
+                    content,
+                });
             }
         }
 
