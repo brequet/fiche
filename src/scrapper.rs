@@ -157,7 +157,7 @@ fn extract_title(html_metadata: HtmlMetadata) -> Option<String> {
 }
 
 fn truncate_to_token_budget(mut content: String) -> String {
-    const MAX_CHARS: usize = 20_000;
+    const MAX_CHARS: usize = 17_500;
 
     if content.len() > MAX_CHARS {
         let cut_index = content
