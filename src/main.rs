@@ -3,7 +3,7 @@ use std::io;
 use reqwest::Client;
 use tracing::{debug, error, level_filters::LevelFilter};
 
-use crate::{cli::Args, error::AppError};
+use crate::{cli::Args, context::AppContext, error::AppError};
 
 mod cli;
 mod commands;
@@ -27,18 +27,12 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result<(), AppError> {
-    let config = config::Config::load()?;
-
-    let http_client = http_client()?;
-
-    let scrapper = scrapper::Scrapper::new(http_client.clone());
-    let groq_client = llm::groq::GroqClient::new(config.groq_api_key.clone(), http_client);
-    let vault = vault::Vault::new(config.vault_path)?;
-
-    let ctx = context::AppContext::new(scrapper, groq_client, vault);
+    let ctx = init_context()?;
 
     match args.command {
-        cli::Commands::Article(cmd) => commands::article::article_clip(&cmd.url, ctx).await,
+        cli::Commands::Article(cmd) => {
+            commands::article::article_clip(&cmd.url, cmd.read, ctx).await
+        }
         cli::Commands::Tool(cmd) => commands::tool::tool_clip(&cmd.url, ctx).await,
         cli::Commands::Issue(_) => commands::issue::create_issue(ctx).await,
     }
@@ -59,6 +53,18 @@ fn init_tracing(verbose: bool) {
         .init();
 
     debug!("Verbose logging enabled.");
+}
+
+fn init_context() -> Result<AppContext, AppError> {
+    let config = config::Config::load()?;
+
+    let http_client = http_client()?;
+
+    let scrapper = scrapper::Scrapper::new(http_client.clone());
+    let groq_client = llm::groq::GroqClient::new(config.groq_api_key.clone(), http_client);
+    let vault = vault::Vault::new(config.vault_path)?;
+
+    Ok(AppContext::new(scrapper, groq_client, vault))
 }
 
 fn http_client() -> Result<Client, AppError> {

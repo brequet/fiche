@@ -130,6 +130,7 @@ impl Vault {
         title: Option<String>,
         summary: &str,
         tags: &[String],
+        read: bool,
     ) -> Result<PathBuf, VaultError> {
         let ctx = ArticleReportContext {
             url: url.to_string(),
@@ -137,7 +138,7 @@ impl Vault {
             summary: summary.to_string(),
             tags: tags.to_vec(),
             date: today(),
-            read: false,
+            read,
         };
         self.write_report(&ctx)
     }

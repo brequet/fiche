@@ -28,6 +28,10 @@ pub enum Commands {
 pub struct ArticleClipCommand {
     #[arg(required = true, help = "The URL")]
     pub url: String,
+
+    /// Mark the article as read
+    #[arg(short, long, default_value_t = false)]
+    pub read: bool,
 }
 
 #[derive(Parser, Debug)]
